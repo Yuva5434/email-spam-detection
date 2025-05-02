@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E mail Spam Detection</title>
+    <style>
+        /* Set background image */
+        body {
+            font-family: "Courier New", monospace;
+            background-image: url('background-image.jpg');  /* Add the path to your image */
+            background-size: cover;  /* Ensure the image covers the entire page */
+            background-position: center center;  /* Center the background image */
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        /* Container styling for the form */
+        .container {
+            background-color: rgba(255, 255, 255, 0.8);  /* White background with transparency */
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin-bottom: 20px;
+            font-size: 16px;
+            resize: none;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .prediction {
+            text-align: center;
+            font-size: 20px;
+            margin-top: 20px;
+        }
+
+        .prediction.spam {
+            color: red;
+            font-weight: bold;
+        }
+
+        .prediction.ham {
+            color: green;
+            font-weight: bold;
+        }
+
+        .loading {
+            text-align: center;
+            margin-top: 10px;
+            color: #3498db;
+            font-size: 18px;
+            font-style: italic;
+        }
+
+        .error {
+            text-align: center;
+            margin-top: 10px;
+            color: red;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .message-spam {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .message-ham {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>E mail Spam Detection</h1>
+        
+        <!-- Text input form for the user -->
+        <form id="text-form">
+            <textarea id="text-input" placeholder="Enter the text to be checked..." rows="4" cols="50"></textarea><br>
+            <button type="submit">Submit</button>
+            <button type="button" id="clear-button" style="margin-top: 10px; background-color: #f44336;">Clear</button>
+        </form>
+        
+        <div class="loading" id="loading" style="display: none;">Processing...</div>
+        <div class="error" id="error-message" style="display: none;"></div>
+        <div class="prediction">
+            <h2>Prediction: <span id="prediction">Awaiting input...</span></h2>
+        </div>
+
+        <!-- Container for displaying saved messages -->
+        <div class="saved-messages" id="saved-messages" style="margin-top: 30px;">
+            <h2>Saved Messages</h2>
+            <ul id="messages-list" style="list-style-type:none; padding-left: 0;"></ul>
+        </div>
+
+    </div>
+
+    <script>
+        // Function to fetch and display saved messages
+        function fetchSavedMessages() {
+            fetch('/messages')
+                .then(response => response.json())
+                .then(data => {
+                    const messagesList = document.getElementById('messages-list');
+                    messagesList.innerHTML = '';
+                    data.forEach(msg => {
+                        const li = document.createElement('li');
+                        li.style.border = '1px solid #ddd';
+                        li.style.padding = '10px';
+                        li.style.marginBottom = '10px';
+                        li.style.borderRadius = '5px';
+                        li.textContent = `ID: ${msg.id} | Text: ${msg.text} | Label: ${msg.label}`;
+                        // Apply spam or ham class for styling
+                        if (msg.label.toLowerCase() === 'spam') {
+                            li.classList.add('message-spam');
+                        } else if (msg.label.toLowerCase() === 'ham') {
+                            li.classList.add('message-ham');
+                        }
+                        messagesList.appendChild(li);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching saved messages:', error);
+                });
+        }
+
+        // Fetch saved messages on page load
+        window.onload = function() {
+            fetchSavedMessages();
+        };
+
+        // Event listener for form submission
+        document.getElementById('text-form').addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevent form from submitting the traditional way
+
+            const text = document.getElementById('text-input').value.trim();
+
+            // Clear previous messages
+            const predictionSpan = document.getElementById('prediction');
+            predictionSpan.innerText = "Awaiting input...";
+            predictionSpan.classList.remove('spam', 'ham');
+            document.getElementById('error-message').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+
+            if (text === "") {
+                // Show error message if the text input is empty
+                document.getElementById('error-message').innerText = "Please enter some text!";
+                document.getElementById('error-message').style.display = 'block';
+                return;
+            }
+
+            // Show loading message while waiting for response
+            document.getElementById('loading').style.display = 'block';
+
+            // Send a POST request to the Flask backend
+            fetch('/predict', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: `text=${encodeURIComponent(text)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading message
+                document.getElementById('loading').style.display = 'none';
+
+                // Show the prediction result with styling
+                predictionSpan.innerText = data.prediction;
+                predictionSpan.classList.remove('spam', 'ham');
+                if (data.prediction.toLowerCase() === 'spam') {
+                    predictionSpan.classList.add('spam');
+                } else if (data.prediction.toLowerCase() === 'ham') {
+                    predictionSpan.classList.add('ham');
+                }
+
+                // Refresh the saved messages list
+                fetchSavedMessages();
+            })
+            .catch(error => {
+                // Hide loading message
+                document.getElementById('loading').style.display = 'none';
+
+                // Show error message
+                document.getElementById('error-message').innerText = "An error occurred. Please try again.";
+                document.getElementById('error-message').style.display = 'block';
+                console.error('Error:', error);
+            });
+        });
+
+        // Event listener for clear button
+        document.getElementById('clear-button').addEventListener('click', function() {
+            // Clear the textarea input
+            document.getElementById('text-input').value = '';
+
+            // Clear the prediction display
+            const predictionSpan = document.getElementById('prediction');
+            predictionSpan.innerText = "Awaiting input...";
+            predictionSpan.classList.remove('spam', 'ham');
+
+            // Hide error and loading messages
+            document.getElementById('error-message').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+
+            // Clear the saved messages list on frontend
+            const messagesList = document.getElementById('messages-list');
+            messagesList.innerHTML = '';
+
+            // Send request to backend to clear stored messages
+            fetch('/clear_messages', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data.message);
+                // Refresh the saved messages list after clearing
+                fetchSavedMessages();
+            })
+            .catch(error => {
+                console.error('Error clearing messages:', error);
+            });
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,5 @@
+flask
+scikit-learn
+joblib
+tornado>=6.2
+packaging
